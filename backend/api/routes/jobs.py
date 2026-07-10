@@ -1,3 +1,10 @@
+"""
+api/routes/jobs.py — Day 10 update.
+
+Added:
+  GET /jobs/{id}/retries  — retry history for a job
+"""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.db.connection import get_db_pool, get_redis
 from backend.models.job import Job, JobCreate, JobListResponse, JobResponse, JobStatus
+from backend.models.retry import RetryAttemptResponse
 from backend.core.queue.enqueue import enqueue_job
 
 log = structlog.get_logger(__name__)
@@ -26,6 +34,8 @@ def _row_to_job(row) -> Job:
     return Job(**data)
 
 
+# ── POST /jobs ────────────────────────────────────────────────────────────────
+
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     job_in: JobCreate,
@@ -35,6 +45,8 @@ async def create_job(
     job = await enqueue_job(job_in, pool, redis)
     return JobResponse.from_job(job)
 
+
+# ── GET /jobs ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=JobListResponse)
 async def list_jobs(
@@ -68,6 +80,8 @@ async def list_jobs(
     return JobListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
+# ── GET /jobs/{id} ────────────────────────────────────────────────────────────
+
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: uuid.UUID,
@@ -79,6 +93,31 @@ async def get_job(
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     return JobResponse.from_job(_row_to_job(row))
 
+
+# ── GET /jobs/{id}/retries ────────────────────────────────────────────────────
+
+@router.get("/{job_id}/retries", response_model=list[RetryAttemptResponse])
+async def get_job_retries(
+    job_id: uuid.UUID,
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> list[RetryAttemptResponse]:
+    """Return the retry history for a job, oldest first."""
+    async with pool.acquire() as conn:
+        # Verify job exists
+        exists = await conn.fetchval("SELECT 1 FROM jobs WHERE id = $1", job_id)
+        if not exists:
+            raise HTTPException(
+                status_code=404, detail=f"Job {job_id} not found")
+
+        rows = await conn.fetch(
+            "SELECT * FROM retries WHERE job_id = $1 ORDER BY attempt ASC",
+            job_id,
+        )
+
+    return [RetryAttemptResponse(**dict(r)) for r in rows]
+
+
+# ── DELETE /jobs/{id} ─────────────────────────────────────────────────────────
 
 @router.delete("/{job_id}", status_code=status.HTTP_200_OK)
 async def cancel_job(
