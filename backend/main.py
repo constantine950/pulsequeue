@@ -1,14 +1,6 @@
-"""
-main.py — PulseQueue API server entry point.
-
-Starts FastAPI, manages connection lifecycle via lifespan,
-mounts all routers, and configures structured logging.
-
-Run:
-    uvicorn backend.main:app --reload --port 8000
-"""
-
 from __future__ import annotations
+from backend.api.routes import jobs, workers, schedules, metrics
+from backend.api.middleware.logging import LoggingMiddleware
 
 import logging
 from contextlib import asynccontextmanager
@@ -22,9 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 import backend.db.connection as db
 
-
-# ── Logging setup ─────────────────────────────────────────────────────────────
-# Configure structlog before anything else imports it.
 
 def configure_logging() -> None:
     structlog.configure(
@@ -46,31 +35,20 @@ configure_logging()
 log = structlog.get_logger(__name__)
 
 
-# ── Lifespan ──────────────────────────────────────────────────────────────────
-# Runs once at startup and once at shutdown. Owns all shared resources.
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     log.info("pulsequeue.starting", version=settings.app_version)
-
-    # ── Startup ──
     db.db_pool = await db.create_db_pool()
     db.redis_client = await db.create_redis_client()
-
     log.info("pulsequeue.ready")
     yield
-    # ── Shutdown ──
     log.info("pulsequeue.stopping")
-
     if db.db_pool:
         await db.close_db_pool(db.db_pool)
     if db.redis_client:
         await db.close_redis_client(db.redis_client)
-
     log.info("pulsequeue.stopped")
 
-
-# ── App factory ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title=settings.app_name,
@@ -81,7 +59,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — open for local dashboard dev; lock down in production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
@@ -90,11 +67,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Logging middleware
+app.add_middleware(LoggingMiddleware)
 
-# ── Routers ───────────────────────────────────────────────────────────────────
-# Imported here to avoid circular imports. Each router is filled in its day.
-
-from backend.api.routes import jobs, workers, schedules, metrics  # noqa: E402
+# Routers
 
 app.include_router(jobs.router,      prefix="/jobs",      tags=["jobs"])
 app.include_router(workers.router,   prefix="/workers",   tags=["workers"])
@@ -102,40 +78,28 @@ app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
 app.include_router(metrics.router,   prefix="/metrics",   tags=["metrics"])
 
 
-# ── Health check ─────────────────────────────────────────────────────────────
-
 @app.get("/health", tags=["system"])
 async def health() -> dict:
-    """Liveness probe — returns 200 if the server is up."""
     return {"status": "ok", "version": settings.app_version}
 
 
 @app.get("/ready", tags=["system"])
 async def ready() -> dict:
-    """
-    Readiness probe — checks DB and Redis connectivity.
-    Returns 200 only when both are reachable.
-    """
     checks: dict[str, str] = {}
-
     try:
         async with db.db_pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
         checks["postgres"] = "ok"
     except Exception as e:
         checks["postgres"] = f"error: {e}"
-
     try:
         await db.redis_client.ping()
         checks["redis"] = "ok"
     except Exception as e:
         checks["redis"] = f"error: {e}"
-
     all_ok = all(v == "ok" for v in checks.values())
     return {"status": "ready" if all_ok else "degraded", "checks": checks}
 
-
-# ── Dev entrypoint ────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     uvicorn.run(
