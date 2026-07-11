@@ -1,10 +1,3 @@
-"""
-api/routes/jobs.py — Day 10 update.
-
-Added:
-  GET /jobs/{id}/retries  — retry history for a job
-"""
-
 from __future__ import annotations
 
 import json
@@ -20,6 +13,12 @@ from backend.db.connection import get_db_pool, get_redis
 from backend.models.job import Job, JobCreate, JobListResponse, JobResponse, JobStatus
 from backend.models.retry import RetryAttemptResponse
 from backend.core.queue.enqueue import enqueue_job
+from backend.core.queue.dead_letter import (
+    list_dead_jobs,
+    requeue_dead_job,
+    dlq_depth,
+    purge_dlq,
+)
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
@@ -80,6 +79,21 @@ async def list_jobs(
     return JobListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
+# ── GET /jobs/dead ────────────────────────────────────────────────────────────
+
+@router.get("/dead", response_model=JobListResponse)
+async def list_dead(
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    pool: asyncpg.Pool = Depends(get_db_pool),
+    redis: aioredis.Redis = Depends(get_redis),
+) -> JobListResponse:
+    """List all dead jobs with current DLQ depth."""
+    jobs = await list_dead_jobs(pool, limit=limit)
+    depth = await dlq_depth(redis)
+    items = [JobResponse.from_job(j) for j in jobs]
+    return JobListResponse(items=items, total=depth, limit=limit, offset=0)
+
+
 # ── GET /jobs/{id} ────────────────────────────────────────────────────────────
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -101,20 +115,43 @@ async def get_job_retries(
     job_id: uuid.UUID,
     pool: asyncpg.Pool = Depends(get_db_pool),
 ) -> list[RetryAttemptResponse]:
-    """Return the retry history for a job, oldest first."""
     async with pool.acquire() as conn:
-        # Verify job exists
         exists = await conn.fetchval("SELECT 1 FROM jobs WHERE id = $1", job_id)
         if not exists:
             raise HTTPException(
                 status_code=404, detail=f"Job {job_id} not found")
-
         rows = await conn.fetch(
             "SELECT * FROM retries WHERE job_id = $1 ORDER BY attempt ASC",
             job_id,
         )
-
     return [RetryAttemptResponse(**dict(r)) for r in rows]
+
+
+# ── POST /jobs/{id}/requeue ───────────────────────────────────────────────────
+
+@router.post("/{job_id}/requeue", response_model=JobResponse)
+async def requeue_job(
+    job_id: uuid.UUID,
+    pool: asyncpg.Pool = Depends(get_db_pool),
+    redis: aioredis.Redis = Depends(get_redis),
+) -> JobResponse:
+    """Manually re-queue a dead job. Resets attempt counter."""
+    try:
+        job = await requeue_dead_job(job_id, pool, redis)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return JobResponse.from_job(job)
+
+
+# ── DELETE /jobs/dead ─────────────────────────────────────────────────────────
+
+@router.delete("/dead", status_code=status.HTTP_200_OK)
+async def purge_dead(
+    redis: aioredis.Redis = Depends(get_redis),
+) -> dict:
+    """Purge all entries from the dead letter queue Redis list."""
+    count = await purge_dlq(redis)
+    return {"purged": count}
 
 
 # ── DELETE /jobs/{id} ─────────────────────────────────────────────────────────
