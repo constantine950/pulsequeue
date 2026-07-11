@@ -17,7 +17,7 @@ from backend.config import settings
 from backend.db.connection import create_db_pool, create_redis_client
 from backend.core.queue.dequeue import dequeue
 from backend.core.worker.executor import execute_job
-from backend.core.retry.retry import handle_failure
+from backend.core.retry.retry import handle_failure, move_delayed_jobs
 from backend.models.job import Job, JobStatus
 
 log = structlog.get_logger(__name__)
@@ -88,7 +88,11 @@ class Worker:
 
     async def _run_loop(self) -> None:
         log.info("worker.ready", worker_id=str(self.worker_id))
+
+        # Three background tasks running alongside the main dequeue loop
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        delay_mover_task = asyncio.create_task(self._delay_mover_loop())
+
         try:
             while not _shutdown:
                 job_id = await dequeue(self.redis)
@@ -96,11 +100,23 @@ class Worker:
                     continue
                 await self._process(job_id)
         finally:
-            heartbeat_task.cancel()
+            for task in (heartbeat_task, delay_mover_task):
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    async def _delay_mover_loop(self) -> None:
+        """Poll pulsequeue:delayed every second and re-queue due jobs."""
+        while not _shutdown:
             try:
-                await heartbeat_task
-            except asyncio.CancelledError:
-                pass
+                moved = await move_delayed_jobs(self.redis, self.pool)
+                if moved:
+                    log.info("delay_mover.moved", count=moved)
+            except Exception as e:
+                log.warning("delay_mover.error", error=str(e))
+            await asyncio.sleep(1.0)
 
     async def _process(self, job_id: str) -> None:
         job = await self._load_job(job_id)
@@ -121,8 +137,6 @@ class Worker:
         )
 
         await self._mark_running(job)
-
-        # Reload job so attempt counter is current after _mark_running increment
         job = await self._load_job(job_id)
 
         success, result, error = await execute_job(job)
@@ -141,10 +155,7 @@ class Worker:
                 attempt=job.attempt,
                 error=str(error),
             )
-            # Hand off to retry engine — it decides retry vs dead
             await handle_failure(job, error, self.pool, self.redis)
-
-    # ── DB helpers ─────────────────────────────────────────────────────────────
 
     async def _load_job(self, job_id: str) -> Job | None:
         async with self.pool.acquire() as conn:
