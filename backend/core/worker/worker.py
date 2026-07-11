@@ -1,14 +1,3 @@
-"""
-core/worker/worker.py — Day 10 update.
-
-Changes from Day 8:
-  - _mark_running now increments attempt counter
-  - _mark_failed stores error cleanly and sets completed_at
-  - _mark_completed stores result as jsonb
-  - Added _load_job helper that handles JSONB deserialization
-  - Status transitions logged with timestamps for observability
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -28,10 +17,10 @@ from backend.config import settings
 from backend.db.connection import create_db_pool, create_redis_client
 from backend.core.queue.dequeue import dequeue
 from backend.core.worker.executor import execute_job
+from backend.core.retry.retry import handle_failure
 from backend.models.job import Job, JobStatus
 
 log = structlog.get_logger(__name__)
-
 _shutdown = False
 
 
@@ -132,6 +121,10 @@ class Worker:
         )
 
         await self._mark_running(job)
+
+        # Reload job so attempt counter is current after _mark_running increment
+        job = await self._load_job(job_id)
+
         success, result, error = await execute_job(job)
 
         if success:
@@ -148,6 +141,8 @@ class Worker:
                 attempt=job.attempt,
                 error=str(error),
             )
+            # Hand off to retry engine — it decides retry vs dead
+            await handle_failure(job, error, self.pool, self.redis)
 
     # ── DB helpers ─────────────────────────────────────────────────────────────
 
@@ -161,22 +156,19 @@ class Worker:
         return _row_to_job(row)
 
     async def _mark_running(self, job: Job) -> None:
-        """Transition job to running and increment attempt counter."""
         now = datetime.now(timezone.utc)
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
                 UPDATE jobs
-                SET status      = 'running',
-                    worker_id   = $1,
-                    started_at  = $2,
-                    attempt     = attempt + 1,
-                    updated_at  = $2
+                SET status     = 'running',
+                    worker_id  = $1,
+                    started_at = $2,
+                    attempt    = attempt + 1,
+                    updated_at = $2
                 WHERE id = $3
                 """,
-                self.worker_id,
-                now,
-                job.id,
+                self.worker_id, now, job.id,
             )
 
     async def _mark_completed(self, job: Job, result: dict) -> None:
@@ -191,20 +183,11 @@ class Worker:
                     updated_at   = $1
                 WHERE id = $3
                 """,
-                now,
-                json.dumps(result),
-                job.id,
+                now, json.dumps(result), job.id,
             )
 
     async def _mark_failed(self, job: Job, error: Exception) -> None:
-        """
-        Mark job as failed with full error info.
-        Retry logic (Day 11) will inspect attempt vs max_retries
-        and re-queue or move to dead.
-        """
         now = datetime.now(timezone.utc)
-        tb = traceback.format_exc()
-
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
@@ -216,10 +199,7 @@ class Worker:
                     updated_at      = $1
                 WHERE id = $4
                 """,
-                now,
-                str(error),
-                tb,
-                job.id,
+                now, str(error), traceback.format_exc(), job.id,
             )
 
     async def _heartbeat_loop(self) -> None:
@@ -235,11 +215,8 @@ class Worker:
                             updated_at        = NOW()
                         WHERE id = $3
                         """,
-                        self.jobs_processed,
-                        self.jobs_failed,
-                        self.worker_id,
+                        self.jobs_processed, self.jobs_failed, self.worker_id,
                     )
-                log.debug("worker.heartbeat", worker_id=str(self.worker_id))
             except Exception as e:
                 log.warning("worker.heartbeat_failed", error=str(e))
             await asyncio.sleep(settings.worker_heartbeat_interval)
