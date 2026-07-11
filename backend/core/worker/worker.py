@@ -1,3 +1,10 @@
+"""
+core/worker/worker.py — Day 14 update.
+
+Added: _recovery_loop() background task that runs every 15s,
+marks stale workers, and re-queues their orphaned jobs.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +24,7 @@ from backend.config import settings
 from backend.db.connection import create_db_pool, create_redis_client
 from backend.core.queue.dequeue import dequeue
 from backend.core.worker.executor import execute_job
+from backend.core.worker.heartbeat import run_recovery_cycle
 from backend.core.retry.retry import handle_failure, move_delayed_jobs
 from backend.models.job import Job, JobStatus
 
@@ -89,9 +97,11 @@ class Worker:
     async def _run_loop(self) -> None:
         log.info("worker.ready", worker_id=str(self.worker_id))
 
-        # Three background tasks running alongside the main dequeue loop
-        heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-        delay_mover_task = asyncio.create_task(self._delay_mover_loop())
+        background = [
+            asyncio.create_task(self._heartbeat_loop()),
+            asyncio.create_task(self._delay_mover_loop()),
+            asyncio.create_task(self._recovery_loop()),
+        ]
 
         try:
             while not _shutdown:
@@ -100,15 +110,34 @@ class Worker:
                     continue
                 await self._process(job_id)
         finally:
-            for task in (heartbeat_task, delay_mover_task):
+            for task in background:
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
 
+    async def _heartbeat_loop(self) -> None:
+        while not _shutdown:
+            try:
+                async with self.pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        UPDATE workers
+                        SET last_heartbeat_at = NOW(),
+                            jobs_processed    = $1,
+                            jobs_failed       = $2,
+                            updated_at        = NOW()
+                        WHERE id = $3
+                        """,
+                        self.jobs_processed, self.jobs_failed, self.worker_id,
+                    )
+                log.debug("worker.heartbeat", worker_id=str(self.worker_id))
+            except Exception as e:
+                log.warning("worker.heartbeat_failed", error=str(e))
+            await asyncio.sleep(settings.worker_heartbeat_interval)
+
     async def _delay_mover_loop(self) -> None:
-        """Poll pulsequeue:delayed every second and re-queue due jobs."""
         while not _shutdown:
             try:
                 moved = await move_delayed_jobs(self.redis, self.pool)
@@ -117,6 +146,15 @@ class Worker:
             except Exception as e:
                 log.warning("delay_mover.error", error=str(e))
             await asyncio.sleep(1.0)
+
+    async def _recovery_loop(self) -> None:
+        """Check for stale workers and recover their jobs every 15 seconds."""
+        while not _shutdown:
+            await asyncio.sleep(15)
+            try:
+                await run_recovery_cycle(self.pool, self.redis)
+            except Exception as e:
+                log.warning("recovery.error", error=str(e))
 
     async def _process(self, job_id: str) -> None:
         job = await self._load_job(job_id)
@@ -212,25 +250,6 @@ class Worker:
                 """,
                 now, str(error), traceback.format_exc(), job.id,
             )
-
-    async def _heartbeat_loop(self) -> None:
-        while not _shutdown:
-            try:
-                async with self.pool.acquire() as conn:
-                    await conn.execute(
-                        """
-                        UPDATE workers
-                        SET last_heartbeat_at = NOW(),
-                            jobs_processed    = $1,
-                            jobs_failed       = $2,
-                            updated_at        = NOW()
-                        WHERE id = $3
-                        """,
-                        self.jobs_processed, self.jobs_failed, self.worker_id,
-                    )
-            except Exception as e:
-                log.warning("worker.heartbeat_failed", error=str(e))
-            await asyncio.sleep(settings.worker_heartbeat_interval)
 
 
 async def main():
