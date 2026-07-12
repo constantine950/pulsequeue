@@ -1,10 +1,3 @@
-"""
-core/worker/worker.py — Day 14 update.
-
-Added: _recovery_loop() background task that runs every 15s,
-marks stale workers, and re-queues their orphaned jobs.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -25,6 +18,7 @@ from backend.db.connection import create_db_pool, create_redis_client
 from backend.core.queue.dequeue import dequeue
 from backend.core.worker.executor import execute_job
 from backend.core.worker.heartbeat import run_recovery_cycle
+from backend.core.worker.timeout import kill_stuck_jobs
 from backend.core.retry.retry import handle_failure, move_delayed_jobs
 from backend.models.job import Job, JobStatus
 
@@ -96,13 +90,11 @@ class Worker:
 
     async def _run_loop(self) -> None:
         log.info("worker.ready", worker_id=str(self.worker_id))
-
         background = [
             asyncio.create_task(self._heartbeat_loop()),
             asyncio.create_task(self._delay_mover_loop()),
             asyncio.create_task(self._recovery_loop()),
         ]
-
         try:
             while not _shutdown:
                 job_id = await dequeue(self.redis)
@@ -132,7 +124,6 @@ class Worker:
                         """,
                         self.jobs_processed, self.jobs_failed, self.worker_id,
                     )
-                log.debug("worker.heartbeat", worker_id=str(self.worker_id))
             except Exception as e:
                 log.warning("worker.heartbeat_failed", error=str(e))
             await asyncio.sleep(settings.worker_heartbeat_interval)
@@ -148,11 +139,12 @@ class Worker:
             await asyncio.sleep(1.0)
 
     async def _recovery_loop(self) -> None:
-        """Check for stale workers and recover their jobs every 15 seconds."""
+        """Every 15s: mark stale workers, recover orphaned jobs, kill stuck jobs."""
         while not _shutdown:
             await asyncio.sleep(15)
             try:
                 await run_recovery_cycle(self.pool, self.redis)
+                await kill_stuck_jobs(self.pool, self.redis)
             except Exception as e:
                 log.warning("recovery.error", error=str(e))
 
@@ -172,6 +164,7 @@ class Worker:
             task=job.task_name,
             attempt=job.attempt,
             priority=job.priority.value,
+            timeout=job.timeout_seconds,
         )
 
         await self._mark_running(job)
@@ -186,12 +179,15 @@ class Worker:
         else:
             await self._mark_failed(job, error)
             self.jobs_failed += 1
+            is_timeout = isinstance(
+                error, (TimeoutError, asyncio.TimeoutError))
             log.warning(
                 "job.failed",
                 job_id=job_id,
                 task=job.task_name,
                 attempt=job.attempt,
                 error=str(error),
+                timeout=is_timeout,
             )
             await handle_failure(job, error, self.pool, self.redis)
 
