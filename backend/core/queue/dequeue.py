@@ -4,22 +4,29 @@ import redis.asyncio as aioredis
 import structlog
 
 from backend.config import settings
-from backend.core.queue.priority import POLL_ORDER
+from backend.core.queue.priority import POLL_ORDER, priority_label
 
 log = structlog.get_logger(__name__)
 
 
 async def dequeue(redis: aioredis.Redis) -> str | None:
-
+    """
+    Block on all three priority queues and return the next job ID.
+    Returns None on timeout (worker loops and checks shutdown flag).
+    """
     result = await redis.brpop(
         POLL_ORDER,
         timeout=settings.redis_brpop_timeout,
     )
 
     if result is None:
-        # Timeout — no jobs available, caller loops and tries again
         return None
 
     queue_key, job_id = result
-    log.debug("job.dequeued", job_id=job_id, queue=queue_key)
+    log.debug(
+        "job.dequeued",
+        job_id=job_id,
+        queue=queue_key,
+        priority=priority_label(queue_key),
+    )
     return job_id
