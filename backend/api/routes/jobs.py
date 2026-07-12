@@ -1,3 +1,10 @@
+"""
+api/routes/jobs.py — Day 18 update.
+
+Cancel now also removes the job from pulsequeue:delayed
+so retrying jobs can be cancelled mid-backoff.
+"""
+
 from __future__ import annotations
 
 import json
@@ -13,12 +20,8 @@ from backend.db.connection import get_db_pool, get_redis
 from backend.models.job import Job, JobCreate, JobListResponse, JobResponse, JobStatus
 from backend.models.retry import RetryAttemptResponse
 from backend.core.queue.enqueue import enqueue_job
-from backend.core.queue.dead_letter import (
-    list_dead_jobs,
-    requeue_dead_job,
-    dlq_depth,
-    purge_dlq,
-)
+from backend.core.queue.dead_letter import list_dead_jobs, requeue_dead_job, dlq_depth, purge_dlq
+from backend.core.retry.retry import DELAYED_QUEUE_KEY
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
@@ -87,7 +90,6 @@ async def list_dead(
     pool: asyncpg.Pool = Depends(get_db_pool),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> JobListResponse:
-    """List all dead jobs with current DLQ depth."""
     jobs = await list_dead_jobs(pool, limit=limit)
     depth = await dlq_depth(redis)
     items = [JobResponse.from_job(j) for j in jobs]
@@ -121,8 +123,7 @@ async def get_job_retries(
             raise HTTPException(
                 status_code=404, detail=f"Job {job_id} not found")
         rows = await conn.fetch(
-            "SELECT * FROM retries WHERE job_id = $1 ORDER BY attempt ASC",
-            job_id,
+            "SELECT * FROM retries WHERE job_id = $1 ORDER BY attempt ASC", job_id,
         )
     return [RetryAttemptResponse(**dict(r)) for r in rows]
 
@@ -135,7 +136,6 @@ async def requeue_job(
     pool: asyncpg.Pool = Depends(get_db_pool),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> JobResponse:
-    """Manually re-queue a dead job. Resets attempt counter."""
     try:
         job = await requeue_dead_job(job_id, pool, redis)
     except ValueError as e:
@@ -149,31 +149,57 @@ async def requeue_job(
 async def purge_dead(
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
-    """Purge all entries from the dead letter queue Redis list."""
     count = await purge_dlq(redis)
     return {"purged": count}
 
 
-# ── DELETE /jobs/{id} ─────────────────────────────────────────────────────────
+# ── DELETE /jobs/{id} — cancel ────────────────────────────────────────────────
 
 @router.delete("/{job_id}", status_code=status.HTTP_200_OK)
 async def cancel_job(
     job_id: uuid.UUID,
     pool: asyncpg.Pool = Depends(get_db_pool),
+    redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
+    """
+    Cancel a job. Works on:
+      - queued    — remove from Redis priority queue (best-effort) + mark cancelled
+      - scheduled — mark cancelled (scheduler won't dispatch it)
+      - retrying  — remove from Redis delayed sorted set + mark cancelled
+
+    Running jobs cannot be cancelled via API (only timed out).
+    """
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT status FROM jobs WHERE id = $1", job_id)
+        row = await conn.fetchrow("SELECT status, priority FROM jobs WHERE id = $1", job_id)
         if not row:
             raise HTTPException(
                 status_code=404, detail=f"Job {job_id} not found")
-        if row["status"] not in ("queued", "scheduled"):
+
+        current_status = row["status"]
+        if current_status not in ("queued", "scheduled", "retrying"):
             raise HTTPException(
                 status_code=409,
-                detail=f"Cannot cancel job with status '{row['status']}'.",
+                detail=f"Cannot cancel job with status '{current_status}'. "
+                "Only queued, scheduled, or retrying jobs can be cancelled.",
             )
+
         await conn.execute(
             "UPDATE jobs SET status = 'cancelled', updated_at = NOW() WHERE id = $1",
             job_id,
         )
-    log.info("job.cancelled", job_id=str(job_id))
-    return {"cancelled": str(job_id)}
+
+    # Remove from delayed sorted set if it was waiting for retry backoff
+    if current_status == "retrying":
+        await redis.zrem(DELAYED_QUEUE_KEY, str(job_id))
+        log.info("job.cancelled_from_delay", job_id=str(job_id))
+
+    # Best-effort removal from Redis priority queue (job may already be dequeued)
+    if current_status == "queued":
+        from backend.core.queue.priority import QUEUE_KEYS
+        from backend.models.job import JobPriority
+        priority = JobPriority(row["priority"])
+        queue_key = QUEUE_KEYS[priority]
+        await redis.lrem(queue_key, 1, str(job_id))
+
+    log.info("job.cancelled", job_id=str(job_id), was_status=current_status)
+    return {"cancelled": str(job_id), "was_status": current_status}
