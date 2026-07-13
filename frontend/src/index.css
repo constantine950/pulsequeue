@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-gray-100 font-sans antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-1.5 h-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-panel border border-border rounded-lg;
+  }
+
+  .stat-value {
+    @apply text-2xl font-semibold font-mono tabular-nums;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium font-mono;
+  }
+}

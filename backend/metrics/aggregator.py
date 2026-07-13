@@ -1,9 +1,4 @@
-"""
-metrics/aggregator.py
 
-Assembles all collector results into a single snapshot dict.
-Called by the metrics API route.
-"""
 
 from __future__ import annotations
 

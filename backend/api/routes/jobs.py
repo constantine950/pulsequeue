@@ -1,10 +1,3 @@
-"""
-api/routes/jobs.py — Day 18 update.
-
-Cancel now also removes the job from pulsequeue:delayed
-so retrying jobs can be cancelled mid-backoff.
-"""
-
 from __future__ import annotations
 
 import json
