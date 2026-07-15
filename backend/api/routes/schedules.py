@@ -1,18 +1,6 @@
-"""
-api/routes/schedules.py — Day 15.
-
-Endpoints:
-  POST  /schedules       — create a cron schedule (Day 16)
-  GET   /schedules       — list all schedules
-  GET   /schedules/{id}  — get a single schedule
-  PATCH /schedules/{id}  — enable/disable a schedule
-  DELETE /schedules/{id} — delete a schedule
-"""
-
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
 
 import asyncpg
 import structlog
@@ -26,17 +14,13 @@ log = structlog.get_logger(__name__)
 router = APIRouter()
 
 
-# ── POST /schedules ───────────────────────────────────────────────────────────
+# POST /schedules
 
 @router.post("", response_model=ScheduleResponse, status_code=201)
 async def create_schedule(
     schedule_in: ScheduleCreate,
     pool: asyncpg.Pool = Depends(get_db_pool),
 ) -> ScheduleResponse:
-    """
-    Create a recurring cron job schedule.
-    The scheduler will enqueue a new job on each cron tick.
-    """
     import json
     from backend.core.scheduler.cron import next_run
 
@@ -74,7 +58,7 @@ async def create_schedule(
     return ScheduleResponse(**dict(row))
 
 
-# ── GET /schedules ────────────────────────────────────────────────────────────
+# GET /schedules
 
 @router.get("", response_model=list[ScheduleResponse])
 async def list_schedules(
@@ -87,7 +71,7 @@ async def list_schedules(
     return [ScheduleResponse(**dict(r)) for r in rows]
 
 
-# ── GET /schedules/{id} ───────────────────────────────────────────────────────
+# GET /schedules/{id}
 
 @router.get("/{schedule_id}", response_model=ScheduleResponse)
 async def get_schedule(
@@ -104,7 +88,7 @@ async def get_schedule(
     return ScheduleResponse(**dict(row))
 
 
-# ── PATCH /schedules/{id} ─────────────────────────────────────────────────────
+# PATCH /schedules/{id}
 
 class SchedulePatch(BaseModel):
     enabled: bool
@@ -136,7 +120,7 @@ async def toggle_schedule(
     return ScheduleResponse(**dict(row))
 
 
-# ── DELETE /schedules/{id} ────────────────────────────────────────────────────
+# DELETE /schedules/{id}
 
 @router.delete("/{schedule_id}", status_code=200)
 async def delete_schedule(

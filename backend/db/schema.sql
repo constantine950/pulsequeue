@@ -1,10 +1,8 @@
 -- PulseQueue Database Schema
--- PostgreSQL 15+
--- Run with: psql -U postgres -d pulsequeue -f schema.sql
 
 -- Extensions
 
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";  -- gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 
 -- Enums

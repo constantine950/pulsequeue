@@ -10,10 +10,6 @@ log = structlog.get_logger(__name__)
 
 
 async def dequeue(redis: aioredis.Redis) -> str | None:
-    """
-    Block on all three priority queues and return the next job ID.
-    Returns None on timeout (worker loops and checks shutdown flag).
-    """
     result = await redis.brpop(
         POLL_ORDER,
         timeout=settings.redis_brpop_timeout,

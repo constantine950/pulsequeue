@@ -1,7 +1,6 @@
 # PulseQueue — dev commands
-# Usage: make <target>
 
-.PHONY: dev db-up db-down db-reset schema lint test
+.PHONY: dev db-up db-down db-reset schema
 
 # Start the API server with hot reload
 dev:
@@ -26,14 +25,3 @@ db-reset:
 schema:
 	psql -U postgres -d pulsequeue -f backend/db/schema.sql
 
-# Run tests
-test:
-	pytest backend/tests/ -v
-
-# Check for obvious issues
-lint:
-	python -m py_compile backend/main.py backend/config.py backend/db/connection.py
-	python -m py_compile backend/models/job.py backend/models/worker.py
-	python -m py_compile backend/core/queue/enqueue.py backend/core/queue/priority.py
-	python -m py_compile backend/api/routes/jobs.py
-	@echo "Lint OK"

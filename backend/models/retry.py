@@ -1,8 +1,3 @@
-"""
-models/retry.py — RetryAttempt entity.
-Append-only log of every retry per job.
-"""
-
 from __future__ import annotations
 
 import uuid

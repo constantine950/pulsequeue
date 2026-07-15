@@ -6,11 +6,6 @@ from croniter import croniter, CroniterBadCronError
 
 
 def next_run(cron_expression: str, after: datetime | None = None) -> datetime:
-    """
-    Return the next datetime a cron expression fires after `after`.
-    Defaults to now if after is not provided.
-    Raises ValueError on invalid cron expression.
-    """
     base = after or datetime.now(timezone.utc)
 
     try:
@@ -30,10 +25,6 @@ def is_valid(cron_expression: str) -> bool:
 
 
 def describe(cron_expression: str) -> str:
-    """
-    Return a human-readable description of a cron expression.
-    Best-effort — falls back to the raw expression if parsing fails.
-    """
     parts = cron_expression.strip().split()
     if len(parts) != 5:
         return cron_expression

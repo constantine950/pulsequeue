@@ -5,7 +5,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        // PulseQueue design tokens
         surface: "#0f1117",
         panel: "#161b27",
         border: "#1e2535",

@@ -22,11 +22,6 @@ async def handle_failure(
     pool: asyncpg.Pool,
     redis,
 ) -> None:
-    """
-    Called after a job fails. Writes retry log, then either:
-      - Schedules a delayed retry via Redis sorted set (non-blocking)
-      - Marks job as dead and pushes to dead letter queue
-    """
     attempt = job.attempt
     error_msg = str(error)
     error_tb = tb_module.format_exc()
@@ -43,7 +38,7 @@ async def handle_failure(
         due_at = None
         next_retry_at = None
 
-    # ── Write retry log ───────────────────────────────────────────────────────
+    # Write retry log
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -102,13 +97,6 @@ async def handle_failure(
 
 
 async def move_delayed_jobs(redis, pool: asyncpg.Pool) -> int:
-    """
-    Move jobs whose backoff delay has elapsed from the delayed sorted set
-    back into their priority queue.
-
-    Called every second by the worker's background task (or scheduler).
-    Returns number of jobs moved.
-    """
     import json
     now_score = time.time()
 

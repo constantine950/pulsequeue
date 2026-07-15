@@ -1,7 +1,3 @@
-"""
-models/schedule.py — Schedule entity for cron jobs.
-"""
-
 from __future__ import annotations
 
 import uuid

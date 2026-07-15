@@ -1,16 +1,3 @@
-"""
-tasks/sample_tasks.py
-
-Demo task functions used for development.
-Each function receives the job payload dict and returns a result dict.
-
-Task functions must be:
-  - async
-  - accept a single dict argument (the job payload)
-  - return a dict (stored as job.result)
-  - raise an exception on failure (worker catches it)
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -18,10 +5,6 @@ import random
 
 
 async def send_email(payload: dict) -> dict:
-    """
-    Simulate sending an email.
-    Fails ~20% of the time to demonstrate retry logic.
-    """
     to = payload.get("to", "unknown")
     subject = payload.get("subject", "(no subject)")
 
@@ -41,7 +24,6 @@ async def send_email(payload: dict) -> dict:
 
 
 async def generate_report(payload: dict) -> dict:
-    """Simulate a slow report generation job."""
     report_type = payload.get("type", "generic")
     report_id = payload.get("report_id", 0)
 
@@ -57,7 +39,6 @@ async def generate_report(payload: dict) -> dict:
 
 
 async def resize_image(payload: dict) -> dict:
-    """Simulate image processing."""
     image_url = payload.get("url", "")
     width = payload.get("width", 800)
     height = payload.get("height", 600)

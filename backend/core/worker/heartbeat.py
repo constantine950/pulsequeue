@@ -1,16 +1,3 @@
-"""
-core/worker/heartbeat.py
-
-Two responsibilities:
-  1. Write heartbeat timestamps — already in worker._heartbeat_loop()
-     (kept there since it needs the worker's own stats)
-
-  2. Stale worker recovery — find workers not seen in 30s and re-queue
-     any jobs that were running on them.
-
-Called by a background task in the worker loop.
-"""
-
 from __future__ import annotations
 
 import uuid
@@ -24,10 +11,6 @@ log = structlog.get_logger(__name__)
 
 
 async def mark_stale_workers(pool: asyncpg.Pool) -> list[uuid.UUID]:
-    """
-    Find active workers whose last heartbeat is older than stale_threshold.
-    Mark them as stale and return their IDs.
-    """
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -52,10 +35,6 @@ async def recover_orphaned_jobs(
     pool: asyncpg.Pool,
     redis,
 ) -> int:
-    """
-    Find jobs stuck in 'running' state on stale workers and re-queue them.
-    Returns number of jobs recovered.
-    """
     if not stale_worker_ids:
         return 0
 

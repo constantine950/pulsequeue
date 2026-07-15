@@ -56,7 +56,7 @@ class Scheduler:
                 log.error("scheduler.poll_error", error=str(e))
             await asyncio.sleep(settings.scheduler_poll_interval)
 
-    # ── One-shot scheduled jobs ───────────────────────────────────────────────
+    # One-shot scheduled jobs
 
     async def _dispatch_due_jobs(self) -> int:
         """Push one-shot scheduled jobs that are now due."""
@@ -79,16 +79,9 @@ class Scheduler:
 
         return len(rows)
 
-    # ── Cron recurring jobs ───────────────────────────────────────────────────
+    # Cron recurring jobs
 
     async def _dispatch_cron_jobs(self) -> int:
-        """
-        Find enabled cron schedules whose next_run_at has passed.
-        For each:
-          1. Create a new job row in jobs table
-          2. Push job ID into Redis
-          3. Update schedule: last_run_at, last_job_id, next_run_at
-        """
         async with self.pool.acquire() as conn:
             schedules = await conn.fetch(
                 """

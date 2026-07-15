@@ -1,14 +1,3 @@
-"""
-models/job.py — Job entity and all related Pydantic schemas.
-
-Three layers:
-  - JobStatus / JobPriority  — enums matching the DB types
-  - Job                      — internal dataclass (mirrors DB row)
-  - JobCreate                — what the API accepts on POST /jobs
-  - JobResponse              — what the API returns
-  - JobUpdate                — internal use for status transitions
-"""
-
 from __future__ import annotations
 
 import uuid
@@ -19,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-# ── Enums ─────────────────────────────────────────────────────────────────────
+# Enums
 
 class JobStatus(str, Enum):
     queued = "queued"
@@ -38,14 +27,9 @@ class JobPriority(str, Enum):
     low = "low"
 
 
-# ── Internal model (mirrors DB row exactly) ───────────────────────────────────
+# Internal model (mirrors DB row exactly)
 
 class Job(BaseModel):
-    """
-    Full job record as stored in PostgreSQL.
-    Populated by loading a row from the jobs table.
-    Workers operate on this object.
-    """
     id:               uuid.UUID
     task_name:        str
     payload:          dict[str, Any]
@@ -75,7 +59,7 @@ class Job(BaseModel):
         # Allow construction from asyncpg Record objects
         from_attributes = True
 
-    # ── Derived helpers ───────────────────────────────────────────────────────
+    # Derived helpers
 
     @property
     def is_terminal(self) -> bool:
@@ -98,17 +82,12 @@ class Job(BaseModel):
 
     @property
     def redis_queue_key(self) -> str:
-        """The Redis list key this job belongs to based on priority."""
         return f"pulsequeue:{self.priority.value}"
 
 
-# ── API request schema ─────────────────────────────────────────────────────────
+# API request schema
 
 class JobCreate(BaseModel):
-    """
-    Payload accepted by POST /jobs.
-    Only task_name is required — everything else has a sensible default.
-    """
     task_name:       str = Field(...,
                                  description="Registered task function name")
     payload:         dict[str, Any] = Field(default_factory=dict)
@@ -142,7 +121,7 @@ class JobCreate(BaseModel):
     }
 
 
-# ── API response schema ────────────────────────────────────────────────────────
+# API response schema
 
 class JobResponse(BaseModel):
     """
@@ -194,13 +173,9 @@ class JobListResponse(BaseModel):
     offset: int
 
 
-# ── Internal update schema ─────────────────────────────────────────────────────
+# Internal update schema
 
 class JobUpdate(BaseModel):
-    """
-    Used internally when workers update job state.
-    All fields optional — only set what changed.
-    """
     status:          JobStatus | None = None
     worker_id:       uuid.UUID | None = None
     started_at:      datetime | None = None

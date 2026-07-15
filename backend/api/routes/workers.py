@@ -1,12 +1,3 @@
-"""
-api/routes/workers.py
-
-Endpoints:
-  GET /workers        — list all workers with status
-  GET /workers/active — only active workers (heartbeat within 30s)
-  GET /workers/{id}   — single worker detail
-"""
-
 from __future__ import annotations
 
 import uuid

@@ -29,7 +29,7 @@ def _row_to_job(row) -> Job:
     return Job(**data)
 
 
-# ── POST /jobs ────────────────────────────────────────────────────────────────
+# POST /jobs
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
@@ -41,7 +41,7 @@ async def create_job(
     return JobResponse.from_job(job)
 
 
-# ── GET /jobs ─────────────────────────────────────────────────────────────────
+# GET /jobs
 
 @router.get("", response_model=JobListResponse)
 async def list_jobs(
@@ -75,7 +75,7 @@ async def list_jobs(
     return JobListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
-# ── GET /jobs/dead ────────────────────────────────────────────────────────────
+# GET /jobs/dead
 
 @router.get("/dead", response_model=JobListResponse)
 async def list_dead(
@@ -89,7 +89,7 @@ async def list_dead(
     return JobListResponse(items=items, total=depth, limit=limit, offset=0)
 
 
-# ── GET /jobs/{id} ────────────────────────────────────────────────────────────
+# GET /jobs/{id}
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
@@ -103,7 +103,7 @@ async def get_job(
     return JobResponse.from_job(_row_to_job(row))
 
 
-# ── GET /jobs/{id}/retries ────────────────────────────────────────────────────
+# GET /jobs/{id}/retries
 
 @router.get("/{job_id}/retries", response_model=list[RetryAttemptResponse])
 async def get_job_retries(
@@ -121,7 +121,7 @@ async def get_job_retries(
     return [RetryAttemptResponse(**dict(r)) for r in rows]
 
 
-# ── POST /jobs/{id}/requeue ───────────────────────────────────────────────────
+# POST /jobs/{id}/requeue
 
 @router.post("/{job_id}/requeue", response_model=JobResponse)
 async def requeue_job(
@@ -136,7 +136,7 @@ async def requeue_job(
     return JobResponse.from_job(job)
 
 
-# ── DELETE /jobs/dead ─────────────────────────────────────────────────────────
+# DELETE /jobs/dead
 
 @router.delete("/dead", status_code=status.HTTP_200_OK)
 async def purge_dead(
@@ -146,7 +146,7 @@ async def purge_dead(
     return {"purged": count}
 
 
-# ── DELETE /jobs/{id} — cancel ────────────────────────────────────────────────
+#  DELETE /jobs/{id} — cancel
 
 @router.delete("/{job_id}", status_code=status.HTTP_200_OK)
 async def cancel_job(
@@ -154,14 +154,6 @@ async def cancel_job(
     pool: asyncpg.Pool = Depends(get_db_pool),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
-    """
-    Cancel a job. Works on:
-      - queued    — remove from Redis priority queue (best-effort) + mark cancelled
-      - scheduled — mark cancelled (scheduler won't dispatch it)
-      - retrying  — remove from Redis delayed sorted set + mark cancelled
-
-    Running jobs cannot be cancelled via API (only timed out).
-    """
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT status, priority FROM jobs WHERE id = $1", job_id)
         if not row:

@@ -1,12 +1,3 @@
-"""
-core/worker/executor.py
-
-Resolves task_name → callable via the registry and executes it.
-Handles timeout enforcement and unknown task errors.
-
-Returns (success, result, error) tuple — worker decides what to do next.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -21,14 +12,7 @@ log = structlog.get_logger(__name__)
 
 
 async def execute_job(job: Job) -> tuple[bool, dict, Exception | None]:
-    """
-    Resolve and execute the task function for a job.
-
-    Returns:
-        (True, result_dict, None)        on success
-        (False, {}, exception)           on failure
-    """
-    # ── 1. Resolve task ───────────────────────────────────────────────────────
+    # Resolve task
     try:
         task_fn = get_task(job.task_name)
     except KeyError as e:
@@ -36,7 +20,7 @@ async def execute_job(job: Job) -> tuple[bool, dict, Exception | None]:
                   task=job.task_name, job_id=str(job.id))
         return False, {}, e
 
-    # ── 2. Execute with timeout ───────────────────────────────────────────────
+    # Execute with timeout
     timeout = job.timeout_seconds or settings.job_default_timeout
 
     try:

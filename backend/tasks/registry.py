@@ -1,16 +1,3 @@
-"""
-tasks/registry.py
-
-Maps task_name strings to async callable functions.
-Workers import REGISTRY and call REGISTRY[task_name](payload).
-
-To add a new task:
-  1. Write an async function in sample_tasks.py (or any module)
-  2. Import it here and add it to REGISTRY
-
-The registry is a plain dict — no magic, no decorators.
-"""
-
 from __future__ import annotations
 
 from backend.tasks.sample_tasks import (

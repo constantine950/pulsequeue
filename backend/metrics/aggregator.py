@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -18,9 +16,6 @@ from backend.metrics.collector import (
 
 
 async def get_snapshot(pool: asyncpg.Pool) -> dict:
-    """
-    Collect all metrics in parallel and return a single snapshot.
-    """
     import asyncio
 
     (

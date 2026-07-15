@@ -29,10 +29,6 @@ async def push_to_dlq(job_id: str, redis) -> None:
 
 
 async def list_dead_jobs(pool: asyncpg.Pool, limit: int = 50) -> list[Job]:
-    """
-    Return dead job records from PostgreSQL ordered by most recent first.
-    Reads from DB not Redis — DB is source of truth.
-    """
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -51,10 +47,6 @@ async def requeue_dead_job(
     pool: asyncpg.Pool,
     redis,
 ) -> Job:
-    """
-    Manually re-queue a dead job — resets attempt counter and pushes
-    back into the priority queue. Used by the dashboard retry button.
-    """
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM jobs WHERE id = $1", job_id)
 
@@ -104,11 +96,6 @@ async def dlq_depth(redis) -> int:
 
 
 async def purge_dlq(redis) -> int:
-    """
-    Remove all entries from the DLQ Redis list.
-    Does NOT change job status in PostgreSQL — jobs remain 'dead' in DB.
-    Returns number of entries removed.
-    """
     depth = await dlq_depth(redis)
     if depth:
         await redis.delete(DLQ_KEY)

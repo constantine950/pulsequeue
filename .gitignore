@@ -46,3 +46,7 @@ frontend/.env
 
 # Docker
 *.pid
+
+scripts/
+infra/
+tests/

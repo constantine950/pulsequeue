@@ -1,12 +1,3 @@
-/**
- * api/client.ts
- *
- * Base fetch wrapper. All API calls go through here so we have
- * one place to handle base URL, error parsing, and auth headers.
- *
- * Vite proxies /api/* → http://localhost:8000/* in dev.
- */
-
 const BASE = "/api";
 
 export class ApiError extends Error {
