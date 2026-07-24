@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useJobs } from "../hooks/useJobs";
 import { JobList } from "../components/jobs/JobList";
 import { JobDetail } from "../components/jobs/JobDetail";
+import { EnqueueModal } from "../components/jobs/EnqueueModal";
 import type { Job, JobStatus } from "../types/job";
 
 const STATUS_FILTERS: { label: string; value: JobStatus | "" }[] = [
@@ -18,6 +19,7 @@ const STATUS_FILTERS: { label: string; value: JobStatus | "" }[] = [
 export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState<JobStatus | "">("");
   const [selected, setSelected] = useState<Job | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
   const { data, loading, refresh } = useJobs({
     status: statusFilter || undefined,
@@ -37,12 +39,19 @@ export default function JobsPage() {
     <div className="h-full flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Jobs</h1>
-        <span className="text-sm text-muted font-mono">
-          {data?.total ?? 0} total
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted font-mono">
+            {data?.total ?? 0} total
+          </span>
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-4 py-1.5 rounded bg-primary text-white text-sm font-mono hover:bg-primary/80 transition-colors"
+          >
+            + enqueue
+          </button>
+        </div>
       </div>
 
-      {/* Status filter tabs */}
       <div className="flex gap-1 flex-wrap">
         {STATUS_FILTERS.map((f) => (
           <button
@@ -59,9 +68,7 @@ export default function JobsPage() {
         ))}
       </div>
 
-      {/* Split pane */}
       <div className="flex-1 flex gap-4 min-h-0">
-        {/* Job list */}
         <div className="w-1/2 card overflow-auto">
           <JobList
             jobs={jobs}
@@ -70,8 +77,6 @@ export default function JobsPage() {
             loading={loading}
           />
         </div>
-
-        {/* Detail panel */}
         <div className="w-1/2 card overflow-auto">
           {selected ? (
             <JobDetail
@@ -86,6 +91,10 @@ export default function JobsPage() {
           )}
         </div>
       </div>
+
+      {showModal && (
+        <EnqueueModal onClose={() => setShowModal(false)} onSuccess={refresh} />
+      )}
     </div>
   );
 }
