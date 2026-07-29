@@ -9,17 +9,30 @@ export class ApiError extends Error {
   }
 }
 
+export function getApiKey(): string {
+  return sessionStorage.getItem("pq_api_key") ?? "";
+}
+
+export function setApiKey(key: string) {
+  if (key) sessionStorage.setItem("pq_api_key", key);
+  else sessionStorage.removeItem("pq_api_key");
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  const key = getApiKey();
+  if (key) headers["X-API-Key"] = key;
+
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 

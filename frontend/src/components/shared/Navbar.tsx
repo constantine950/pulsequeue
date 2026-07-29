@@ -1,7 +1,13 @@
 import { useMetrics } from "../../hooks/useMetrics";
+import { getApiKey } from "../../api/client";
 
-export function Navbar() {
+interface Props {
+  onLogout?: () => void;
+}
+
+export function Navbar({ onLogout }: Props) {
   const { data } = useMetrics(5000);
+  const hasKey = Boolean(getApiKey());
 
   return (
     <header className="border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
@@ -16,7 +22,7 @@ export function Navbar() {
           </span>
         </span>
         <span className="text-muted">
-          failure rate{" "}
+          failure{" "}
           <span
             className={
               !data
@@ -39,6 +45,15 @@ export function Navbar() {
               : "—"}
           </span>
         </span>
+        {hasKey && onLogout && (
+          <button
+            onClick={onLogout}
+            className="text-muted hover:text-gray-300 transition-colors"
+            title="Clear API key"
+          >
+            logout
+          </button>
+        )}
       </div>
     </header>
   );

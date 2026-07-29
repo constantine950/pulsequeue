@@ -1,5 +1,6 @@
 from __future__ import annotations
 from backend.api.routes import jobs, workers, schedules, metrics
+from backend.api.middleware.auth import ApiKeyMiddleware
 from backend.api.middleware.logging import LoggingMiddleware
 
 import logging
@@ -67,10 +68,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Logging middleware
-app.add_middleware(LoggingMiddleware)
 
-# Routers
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(ApiKeyMiddleware)
+
 
 app.include_router(jobs.router,      prefix="/jobs",      tags=["jobs"])
 app.include_router(workers.router,   prefix="/workers",   tags=["workers"])
