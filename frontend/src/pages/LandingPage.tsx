@@ -22,7 +22,7 @@ export default function LandingPage() {
             Stack
           </a>
           <a
-            href="/metrics"
+            href="/login"
             className="px-4 py-1.5 rounded bg-primary text-white text-sm font-mono hover:bg-primary/80 transition-colors"
           >
             Dashboard →
@@ -49,7 +49,7 @@ export default function LandingPage() {
 
         <div className="flex flex-wrap gap-4 justify-center">
           <a
-            href="/metrics"
+            href="/login"
             className="px-6 py-3 rounded-lg bg-primary text-white font-mono hover:bg-primary/80 transition-colors text-sm"
           >
             Open Dashboard →
@@ -108,7 +108,7 @@ export default function LandingPage() {
           running right now.
         </p>
         <a
-          href="/metrics"
+          href="/login"
           className="inline-block px-8 py-3 rounded-lg bg-primary text-white font-mono hover:bg-primary/80 transition-colors"
         >
           Open Dashboard →
