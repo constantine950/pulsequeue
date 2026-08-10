@@ -55,5 +55,8 @@ class Settings(BaseSettings):
     job_default_timeout: int = 300
     job_default_max_retries: int = 3
 
+    api_key: str = ""
+    api_key_header: str = "X-API-Key"
+
 
 settings = Settings()

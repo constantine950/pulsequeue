@@ -1,5 +1,6 @@
 import { useMetrics } from "../../hooks/useMetrics";
 import { getApiKey } from "../../api/client";
+import { useNavigate } from "react-router-dom";
 
 interface Props {
   onLogout?: () => void;
@@ -8,6 +9,12 @@ interface Props {
 export function Navbar({ onLogout }: Props) {
   const { data } = useMetrics(5000);
   const hasKey = Boolean(getApiKey());
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    if (onLogout) onLogout();
+    navigate("/");
+  };
 
   return (
     <header className="border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
@@ -47,7 +54,7 @@ export function Navbar({ onLogout }: Props) {
         </span>
         {hasKey && onLogout && (
           <button
-            onClick={onLogout}
+            onClick={handleLogout}
             className="text-muted hover:text-gray-300 transition-colors"
             title="Clear API key"
           >

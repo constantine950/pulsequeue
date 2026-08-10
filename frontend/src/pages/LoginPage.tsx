@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface Props {
   onLogin: (key: string) => void;
@@ -8,6 +9,7 @@ export default function LoginPage({ onLogin }: Props) {
   const [key, setKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,6 +22,7 @@ export default function LoginPage({ onLogin }: Props) {
       });
       if (res.ok) {
         onLogin(key.trim());
+        navigate("/metrics");
       } else {
         setError("Invalid API key");
       }
