@@ -1,6 +1,6 @@
-import { useMetrics } from "../../hooks/useMetrics";
-import { getApiKey } from "../../api/client";
 import { useNavigate } from "react-router-dom";
+import { useMetrics } from "../../hooks/useMetrics";
+import { getApiKey, setApiKey } from "../../api/client";
 
 interface Props {
   onLogout?: () => void;
@@ -8,17 +8,24 @@ interface Props {
 
 export function Navbar({ onLogout }: Props) {
   const { data } = useMetrics(5000);
-  const hasKey = Boolean(getApiKey());
   const navigate = useNavigate();
+  const hasKey = Boolean(getApiKey());
 
-  const handleLogout = () => {
-    if (onLogout) onLogout();
+  function handleLogout() {
+    setApiKey("");
+    onLogout?.();
     navigate("/");
-  };
+  }
 
   return (
     <header className="border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
-      <span className="text-sm text-muted font-mono">PulseQueue</span>
+      <span
+        className="text-sm text-muted font-mono"
+        onClick={() => navigate("/")}
+      >
+        PulseQueue
+      </span>
+
       <div className="flex items-center gap-6 text-xs font-mono">
         <span className="text-muted">
           workers{" "}
@@ -52,11 +59,12 @@ export function Navbar({ onLogout }: Props) {
               : "—"}
           </span>
         </span>
-        {hasKey && onLogout && (
+
+        {hasKey && (
           <button
             onClick={handleLogout}
-            className="text-muted hover:text-gray-300 transition-colors"
-            title="Clear API key"
+            className="px-3 py-1 rounded border border-border text-muted hover:text-danger hover:border-danger transition-colors"
+            title="Logout"
           >
             logout
           </button>

@@ -3,11 +3,9 @@ export default function LandingPage() {
     <div className="min-h-screen bg-surface text-gray-100 font-sans flex flex-col">
       {/* Nav */}
       <nav className="border-b border-border px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-primary font-mono font-bold text-lg">
-            ▶ PulseQueue
-          </span>
-        </div>
+        <span className="text-primary font-mono font-bold text-lg">
+          ▶ PulseQueue
+        </span>
         <div className="flex items-center gap-6">
           <a
             href="#features"
@@ -55,7 +53,7 @@ export default function LandingPage() {
             Open Dashboard →
           </a>
           <a
-            href="https://github.com"
+            href="https://github.com/constantine950/pulsequeue"
             target="_blank"
             rel="noopener noreferrer"
             className="px-6 py-3 rounded-lg border border-border text-muted hover:text-gray-300 hover:border-gray-500 transition-colors font-mono text-sm"
@@ -64,7 +62,6 @@ export default function LandingPage() {
           </a>
         </div>
 
-        {/* Live stats strip */}
         <LiveStats />
       </section>
 
@@ -117,16 +114,17 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border px-8 py-6 flex items-center justify-between text-xs text-muted font-mono">
-        <span>▶ PulseQueue</span>
+        <span>▶ PulseQueue — built in 30 days</span>
         <span>Python · FastAPI · Redis · PostgreSQL · React</span>
       </footer>
     </div>
   );
 }
 
-// Live stats from the API
+// Live stats
 
 import { useEffect, useState } from "react";
+import { getApiKey } from "../api/client";
 
 function LiveStats() {
   const [stats, setStats] = useState<{
@@ -134,23 +132,49 @@ function LiveStats() {
     jobs_completed: number;
     failure_rate: number;
   } | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/metrics");
+        // Include API key if one is stored (user already logged in)
+        const headers: Record<string, string> = {};
+        const key = getApiKey();
+        if (key) headers["X-API-Key"] = key;
+
+        const res = await fetch("/api/metrics", { headers });
+        if (!res.ok) {
+          setError(true);
+          return;
+        }
         const data = await res.json();
         setStats({
-          active_workers: data.active_workers,
+          active_workers: data.active_workers ?? 0,
           jobs_completed: data.jobs?.completed ?? 0,
-          failure_rate: data.failure_rate_pct,
+          failure_rate: data.failure_rate_pct ?? 0,
         });
-      } catch {}
+        setError(false);
+      } catch {
+        setError(true);
+      }
     }
     load();
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, []);
+
+  if (error) {
+    return (
+      <div className="flex flex-wrap gap-8 justify-center mt-4 p-6 rounded-xl border border-border bg-panel">
+        <p className="text-xs text-muted font-mono">
+          <a href="/login" className="text-primary hover:underline">
+            Log in
+          </a>{" "}
+          to see live stats
+        </p>
+      </div>
+    );
+  }
 
   const items = [
     {

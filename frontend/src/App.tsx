@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import { Sidebar } from "./components/shared/Sidebar";
 import { Navbar } from "./components/shared/Navbar";
 import { getApiKey, setApiKey } from "./api/client";
@@ -28,6 +28,17 @@ function DashboardLayout({
   );
 }
 
+function LoginWrapper({ onLogin }: { onLogin: (key: string) => void }) {
+  const navigate = useNavigate();
+
+  function handleLogin(key: string) {
+    onLogin(key);
+    navigate("/metrics");
+  }
+
+  return <LoginPage onLogin={handleLogin} />;
+}
+
 export default function App() {
   const [apiKey, setKey] = useState(getApiKey);
 
@@ -41,14 +52,10 @@ export default function App() {
     setKey("");
   }
 
-  // If API key is configured in backend but not set in frontend, show login
-  // We detect this by checking if we stored a key or if we're on /login
-  const needsLogin = window.location.pathname === "/login";
-
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+      <Route path="/login" element={<LoginWrapper onLogin={handleLogin} />} />
 
       <Route
         path="/metrics"

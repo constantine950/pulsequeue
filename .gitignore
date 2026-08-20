@@ -48,5 +48,4 @@ frontend/.env
 *.pid
 
 scripts/
-infra/
 tests/
