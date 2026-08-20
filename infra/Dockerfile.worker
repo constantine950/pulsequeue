@@ -5,6 +5,8 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY backend ./backend
+
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
 USER appuser
 
