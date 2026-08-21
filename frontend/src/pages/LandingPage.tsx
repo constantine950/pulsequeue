@@ -137,12 +137,7 @@ function LiveStats() {
   useEffect(() => {
     async function load() {
       try {
-        // Include API key if one is stored (user already logged in)
-        const headers: Record<string, string> = {};
-        const key = getApiKey();
-        if (key) headers["X-API-Key"] = key;
-
-        const res = await fetch("/api/metrics", { headers });
+        const res = await fetch("/api/metrics");
         if (!res.ok) {
           setError(true);
           return;

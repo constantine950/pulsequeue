@@ -12,9 +12,12 @@ export function Sidebar() {
   return (
     <nav className="w-44 shrink-0 border-r border-border flex flex-col py-6 gap-1 px-3">
       <div className="px-3 mb-6">
-        <span className="text-xs font-mono font-semibold text-primary tracking-widest uppercase">
+        <a
+          href="/"
+          className="text-xs font-mono font-semibold text-primary tracking-widest uppercase hover:text-primary/80 transition-colors"
+        >
           ▶ Pulse
-        </span>
+        </a>
       </div>
       {links.map(({ to, label }) => (
         <NavLink
@@ -32,6 +35,15 @@ export function Sidebar() {
           {label}
         </NavLink>
       ))}
+
+      <div className="mt-auto px-3">
+        <a
+          href="/"
+          className="text-xs text-muted hover:text-gray-300 font-mono transition-colors"
+        >
+          ← Landing page
+        </a>
+      </div>
     </nav>
   );
 }
